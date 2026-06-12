@@ -196,7 +196,7 @@ journalctl --user -u deepseek-monitor -n 30
 <details>
 <summary><b>显示 ⚠️ 无连接？</b></summary>
 
-网络问题或 API Key 无效。下个轮询周期自动重试，网络恢复后自动正常。
+网络问题或 API Key 无效。下个轮询周期自动重试，网络恢复后自动正常，或尝试手动刷新。
 </details>
 
 <details>
