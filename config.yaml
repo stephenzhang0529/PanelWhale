@@ -1,0 +1,15 @@
+# DeepSeek Monitor — configuration
+# Copy this to ~/.config/deepseek-monitor/config.yaml and fill in your key.
+# Environment variable DEEPSEEK_API_KEY overrides the file.
+
+api_key: "sk-your-api-key-here"
+
+# How often to check balance (seconds).  Minimum: 30.
+poll_interval_seconds: 300
+
+# Balance thresholds for colour changes and desktop notifications.
+#   above yellow — normal  (💎)
+#   yellow .. red — warning (🟡)
+#   below red      — danger  (🔴)
+alert_threshold_yellow: 5.0
+alert_threshold_red: 1.0

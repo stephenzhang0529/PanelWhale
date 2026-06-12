@@ -1,0 +1,10 @@
+# User config with real API key — never commit
+~/.config/deepseek-monitor/config.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Runtime data
+*.log
+*.tmp

@@ -1,0 +1,12 @@
+[Unit]
+Description=DeepSeek API Usage Monitor
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/deepseek-monitor/main.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=graphical-session.target
