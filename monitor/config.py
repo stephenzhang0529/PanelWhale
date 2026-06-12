@@ -1,4 +1,5 @@
 import os
+import sys
 import yaml
 from dataclasses import dataclass
 from typing import Optional
@@ -12,8 +13,19 @@ class Config:
     alert_threshold_red: float = 1.0
 
 
+def _default_config_dir() -> str:
+    if sys.platform == "win32":
+        return os.path.join(os.environ.get("APPDATA", ""), "deepseek-monitor")
+    return os.path.expanduser("~/.config/deepseek-monitor")
+
+
 def _search_config_files() -> list[str]:
     """Return a list of config file paths to try, in priority order."""
+    if sys.platform == "win32":
+        return [
+            os.path.join(os.environ.get("APPDATA", ""), "deepseek-monitor", "config.yaml"),
+            "config.yaml",
+        ]
     return [
         os.path.expanduser("~/.config/deepseek-monitor/config.yaml"),
         "/opt/deepseek-monitor/config.yaml",

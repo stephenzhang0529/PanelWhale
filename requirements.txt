@@ -1,0 +1,16 @@
+# PanelWhale — Python dependencies
+#
+# Install:  pip install -r requirements.txt
+#
+# Linux : also needs system packages — see install.sh
+# Windows : pip install -r requirements.txt  is sufficient
+
+requests>=2.25.0
+PyYAML>=5.0
+pystray>=0.19.0
+Pillow>=9.0.0
+
+# ---- Optional: desktop notifications ----
+# At least one of these gives you toast notifications on Windows:
+# plyer            # cross-platform, needs platform backends
+# winotify          # Windows-only, lightweight

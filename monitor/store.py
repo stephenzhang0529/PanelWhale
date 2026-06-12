@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import time
 import bisect
@@ -11,7 +12,10 @@ from monitor.api import BalanceInfo
 
 LOCAL_TZ = datetime.now(timezone.utc).astimezone().tzinfo
 
-_DATA_ROOT = os.path.expanduser("~/.local/share/deepseek-monitor")
+if sys.platform == "win32":
+    _DATA_ROOT = os.path.join(os.environ.get("LOCALAPPDATA", ""), "deepseek-monitor")
+else:
+    _DATA_ROOT = os.path.expanduser("~/.local/share/deepseek-monitor")
 _LOGS_DIR = os.path.join(_DATA_ROOT, "logs")
 
 # Retention: keep log files for this many days

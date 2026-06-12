@@ -8,3 +8,6 @@ __pycache__/
 # Runtime data
 *.log
 *.tmp
+
+# virtual environment
+.venv/
