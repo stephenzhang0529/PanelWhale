@@ -1,10 +1,26 @@
-# User config with real API key — never commit
-~/.config/deepseek-monitor/config.yaml
-
 # Python
 __pycache__/
 *.py[cod]
+*.egg-info/
 
-# Runtime data
+# Runtime artifacts
 *.log
 *.tmp
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
+
+# IDE
+.vscode/
+.idea/
+
+# Project-specific — reference / design docs (not part of the app)
+DeepSeek_API_Analysis.md
+menu.md
+README_EN.md

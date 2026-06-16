@@ -11,16 +11,49 @@ from monitor.api import BalanceInfo
 
 LOCAL_TZ = datetime.now(timezone.utc).astimezone().tzinfo
 
-_DATA_ROOT = os.path.expanduser("~/.local/share/deepseek-monitor")
+_DATA_ROOT = os.path.expanduser("~/.local/share/panelwhale")
 _LOGS_DIR = os.path.join(_DATA_ROOT, "logs")
 
-# Retention: keep log files for this many days
-_LOG_RETENTION_DAYS = 7
+# Retention: keep raw session logs for 30 days; daily summaries live 365 days
+_LOG_RETENTION_DAYS = 30
 
 
 # ------------------------------------------------------------------
 # Log-file helpers
 # ------------------------------------------------------------------
+
+# Currency cache file — written by store.add() so the report generator
+# can pick up the correct symbol (¥ / $ / € / …).
+_CURRENCY_FILE = os.path.join(_DATA_ROOT, "currency")
+
+# Mapping from ISO currency code to symbol (mirrors api.py)
+_CURRENCY_MAP = {
+    "CNY": "¥",
+    "USD": "$",
+    "EUR": "€",
+    "GBP": "£",
+    "JPY": "¥",
+}
+
+
+def _save_currency(currency_code: str) -> None:
+    """Write the currency code to a tiny cache file."""
+    try:
+        with open(_CURRENCY_FILE, "w") as f:
+            f.write(currency_code.strip() or "CNY")
+    except OSError:
+        pass
+
+
+def _load_currency_symbol() -> str:
+    """Read the cached currency code and return its symbol. Defaults to ¥."""
+    try:
+        with open(_CURRENCY_FILE, "r") as f:
+            code = f.read().strip()
+        return _CURRENCY_MAP.get(code, code)
+    except FileNotFoundError:
+        return "¥"
+
 
 def _ensure_dirs() -> None:
     os.makedirs(_LOGS_DIR, exist_ok=True)
@@ -109,6 +142,12 @@ class BalanceStore:
         self._cleanup_old_logs()
         self._create_log()
 
+        # Rebuild today's daily summary from raw logs so the weekly report
+        # sees up-to-date data even if the last shutdown didn't flush.
+        from monitor.report import DailySummaryStore
+        DailySummaryStore.aggregate_today_from_logs()
+        DailySummaryStore.cleanup_old()
+
     def end_session(self, balance: BalanceInfo) -> None:
         """Call on shutdown.  Record final consumption and write SUM."""
         if self._last_balance is None:
@@ -140,6 +179,10 @@ class BalanceStore:
 
         self._write_log(final=True)
 
+        # Rebuild today's daily summary so the final consumption is captured
+        from monitor.report import DailySummaryStore
+        DailySummaryStore.aggregate_today_from_logs()
+
     def flush(self) -> None:
         """Force-write accumulated session data to the log with sum_consumption.
 
@@ -169,6 +212,9 @@ class BalanceStore:
         self._session_consumption += consumption
         self._last_balance = total
         self._last_ts = now
+
+        # Persist the currency symbol so the report generator can use it
+        _save_currency(balance.currency)
 
         # In-memory
         self._session_records.append(

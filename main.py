@@ -22,8 +22,9 @@ from monitor.config import load_config
 from monitor.api import DeepSeekAPI
 from monitor.store import BalanceStore
 from monitor.indicator import BalanceIndicator
+from monitor.usage_api import UsageAPI
 
-log = logging.getLogger("deepseek-monitor")
+log = logging.getLogger("panelwhale")
 
 
 def main():
@@ -44,6 +45,14 @@ def main():
     api = DeepSeekAPI(config.api_key)
     store = BalanceStore()
 
+    # Usage API is optional — only create if a token is configured
+    if config.usage_token:
+        usage_api = UsageAPI(config.usage_token)
+        log.info("Usage token configured — usage data will be available")
+    else:
+        usage_api = None
+        log.info("No usage token configured — usage data will not be available")
+
     # Scan today's logs, create new session log
     store.start_session()
     log.info(
@@ -51,7 +60,7 @@ def main():
     )
 
     # Create the indicator — this starts polling + shutdown hooks
-    BalanceIndicator(config, api, store)
+    BalanceIndicator(config, api, store, usage_api=usage_api)
 
     # Let GTK own the process (signal handling via GLib.unix_signal_add)
     Gtk.main()

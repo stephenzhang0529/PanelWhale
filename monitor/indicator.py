@@ -22,6 +22,7 @@ except (ValueError, ImportError):
 from monitor.config import Config
 from monitor.api import DeepSeekAPI, APIError, BalanceInfo
 from monitor.store import BalanceStore
+from monitor.panel import generate_control_panel
 
 log = logging.getLogger(__name__)
 
@@ -30,33 +31,38 @@ log = logging.getLogger(__name__)
 # high-res image for crisp rendering on both regular and HiDPI panels.
 _ICON_PATH = None
 for _candidate in (
-    os.path.join(os.path.dirname(__file__), "..", "deepseek-color.png"),
-    "/opt/deepseek-monitor/deepseek-color.png",
+    os.path.join(os.path.dirname(__file__), "deepseek-color.png"),
+    "/opt/panelwhale/monitor/deepseek-color.png",
 ):
     if os.path.isfile(_candidate):
         _ICON_PATH = _candidate
         break
 
-LABEL_NORMAL = "\U0001f48e"    # 💎
+LABEL_NORMAL = ""               # > ¥5 — no emoji needed
 LABEL_WARNING = "\U0001f7e1"   # 🟡
 LABEL_DANGER = "\U0001f534"    # 🔴
 LABEL_ERROR = "⚠️"              # ⚠️
 
 
 class BalanceIndicator:
-    def __init__(self, config: Config, api: DeepSeekAPI, store: BalanceStore):
+    def __init__(self, config: Config, api: DeepSeekAPI, store: BalanceStore,
+                 usage_api=None):
         self._config = config
         self._api = api
         self._store = store
+        self._usage_api = usage_api
         self._alert_state: Optional[str] = None  # None | "yellow" | "red"
         self._shutting_down = False
         self._last_manual_refresh: float = 0.0  # debounce timestamp
+        self._settings_window = None  # track the settings Gtk.Window
+        self._balance_timer_id: int = 0
+        self._usage_timer_id: int = 0
 
-        Notify.init("deepseek-monitor")
+        Notify.init("panelwhale")
 
         # ---- Build indicator ----
         self._indicator = IndicatorModule.Indicator.new(
-            "deepseek-monitor",
+            "panelwhale",
             "utilities-system-monitor",
             _INDICATOR_CATEGORY,
         )
@@ -71,42 +77,80 @@ class BalanceIndicator:
         self._menu = Gtk.Menu()
         self._build_menu()
         self._indicator.set_menu(self._menu)
+        self._charge_item.hide()  # hidden until balance drops ≤ yellow threshold
         self._menu.show_all()
 
-        self._set_label(LABEL_ERROR + " 加载中...")
+        self._set_label(LABEL_ERROR + " Loading...")
 
         # ---- Shutdown hooks ----
         self._install_shutdown_handlers()
 
         # ---- Start polling ----
         self._do_poll()
-        GLib.timeout_add_seconds(config.poll_interval_seconds, self._on_timer)
+        self._balance_timer_id = GLib.timeout_add_seconds(
+            config.poll_interval_seconds, self._on_timer
+        )
+
+        # ---- Start usage polling (if token available) ----
+        if self._usage_api is not None:
+            self._do_usage_poll()
+            self._usage_timer_id = GLib.timeout_add_seconds(
+                config.usage_poll_interval_seconds, self._on_usage_timer
+            )
 
     # ------------------------------------------------------------------
     # Menu construction
     # ------------------------------------------------------------------
 
     def _build_menu(self) -> None:
-        self._menuitem_total = self._add_info_item("总余额: ---")
-        self._menuitem_granted = self._add_info_item("  充值余额: ---")
-        self._menuitem_topped = self._add_info_item("  赠送余额: ---")
+        self._menuitem_total = self._add_info_item("Total Balance: ---")
+        self._menuitem_topped = self._add_info_item("  Topped-up: ---")
+        self._menuitem_granted = self._add_info_item("  Granted: ---")
         self._add_separator()
 
-        self._menuitem_5m = self._add_info_item("过去5分钟:  ---")
-        self._menuitem_30m = self._add_info_item("过去30分钟: ---")
-        self._menuitem_3h = self._add_info_item("过去3小时:  ---")
-        self._menuitem_today = self._add_info_item("今日累计:   ---")
+        self._menuitem_5m = self._add_info_item("Last 5 min:  ---")
+        self._menuitem_30m = self._add_info_item("Last 30 min: ---")
+        self._menuitem_3h = self._add_info_item("Last 3 hr:   ---")
+        self._menuitem_today = self._add_info_item("Today:       ---")
         self._add_separator()
 
-        self._menuitem_updated = self._add_info_item("上次更新: ---")
+        # ── Usage This Month section (hidden when no usage token) ──
+        self._menuitem_usage_header = self._add_info_item("Usage This Month")
+        self._menuitem_usage_total = self._add_info_item("  Total Cost: ---")
+        self._menuitem_usage_flash = self._add_info_item("  Flash: ---")
+        self._menuitem_usage_pro = self._add_info_item("  Pro: ---")
+        if self._usage_api is None:
+            self._menuitem_usage_header.hide()
+            self._menuitem_usage_total.hide()
+            self._menuitem_usage_flash.hide()
+            self._menuitem_usage_pro.hide()
+        self._add_separator()
+        # ── End usage section ──
+
+        self._menuitem_updated = self._add_info_item("Last update: ---")
         self._add_separator()
 
-        refresh_item = Gtk.MenuItem(label="🔄 立即刷新")
+        # Charge button — only visible when balance is low
+        self._charge_item = Gtk.MenuItem(label="Charge")
+        self._charge_item.connect("activate", self._on_charge)
+        self._menu.append(self._charge_item)
+        self._add_separator()
+
+        refresh_item = Gtk.MenuItem(label="Refresh")
         refresh_item.connect("activate", self._on_manual_refresh)
         self._menu.append(refresh_item)
+
+        settings_item = Gtk.MenuItem(label="Settings")
+        settings_item.connect("activate", self._on_settings)
+        self._menu.append(settings_item)
         self._add_separator()
 
-        quit_item = Gtk.MenuItem(label="❌ 退出")
+        report_item = Gtk.MenuItem(label="Open Control Panel")
+        report_item.connect("activate", self._on_open_panel)
+        self._menu.append(report_item)
+        self._add_separator()
+
+        quit_item = Gtk.MenuItem(label="Quit")
         quit_item.connect("activate", self._on_quit)
         self._menu.append(quit_item)
 
@@ -170,26 +214,226 @@ class BalanceIndicator:
             self._do_poll()
         return True
 
+    def _on_charge(self, _widget) -> None:
+        """Open the DeepSeek top-up page in the default browser."""
+        import subprocess
+        url = "https://platform.deepseek.com/top_up"
+        # Same browser-finding logic as _on_open_report
+        for browser in (
+            "sensible-browser", "x-www-browser",
+            "firefox", "google-chrome", "chromium-browser", "chromium",
+        ):
+            if subprocess.run(["which", browser],
+                              stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL).returncode == 0:
+                subprocess.Popen([browser, url], start_new_session=True)
+                return
+        subprocess.Popen(["xdg-open", url], start_new_session=True)
+
     def _on_manual_refresh(self, _widget) -> None:
-        """Handle the '🔄 立即刷新' menu item with 15-second debounce."""
+        """Handle the 'Refresh' menu item with 15-second debounce."""
         now = time.time()
         if now - self._last_manual_refresh < 15:
             log.debug("Manual refresh skipped — within debounce window")
             return
         self._last_manual_refresh = now
         self._do_poll()
+        if self._usage_api is not None:
+            self._do_usage_poll()
+
+    def _on_settings(self, _widget) -> None:
+        """Open the Settings window (one at a time)."""
+        from monitor.settings import SettingsWindow
+
+        # If a settings window is already open, just present it
+        if self._settings_window is not None:
+            self._settings_window.present()
+            return
+
+        self._settings_window = SettingsWindow(
+            self._config,
+            self._api,
+            self._usage_api,
+            on_saved=self._on_settings_saved,
+        )
+        self._settings_window.connect("destroy", self._on_settings_destroyed)
+
+    def _on_settings_destroyed(self, _window) -> None:
+        """Clear the reference when the settings window is closed."""
+        self._settings_window = None
+
+    def _on_settings_saved(self, new_config: Config) -> None:
+        """Handle config changes after the user saves settings.
+
+        Recreates API objects and restarts timers for any fields that changed.
+        """
+        api_key_changed = new_config.api_key != self._config.api_key
+        token_changed = new_config.usage_token != self._config.usage_token
+        balance_interval_changed = (
+            new_config.poll_interval_seconds != self._config.poll_interval_seconds
+        )
+        usage_interval_changed = (
+            new_config.usage_poll_interval_seconds
+            != self._config.usage_poll_interval_seconds
+        )
+
+        # Update the in-memory config
+        self._config = new_config
+
+        # Recreate balance API if key changed
+        if api_key_changed:
+            self._api = DeepSeekAPI(new_config.api_key)
+
+        # Recreate or clear usage API if token changed
+        if token_changed:
+            if new_config.usage_token:
+                from monitor.usage_api import UsageAPI
+                self._usage_api = UsageAPI(new_config.usage_token)
+                self._menuitem_usage_header.show()
+                self._menuitem_usage_total.show()
+                self._menuitem_usage_flash.show()
+                self._menuitem_usage_pro.show()
+                # Start usage timer if not already running
+                if self._usage_timer_id == 0:
+                    self._do_usage_poll()
+                    self._usage_timer_id = GLib.timeout_add_seconds(
+                        new_config.usage_poll_interval_seconds,
+                        self._on_usage_timer,
+                    )
+            else:
+                self._usage_api = None
+                self._menuitem_usage_header.hide()
+                self._menuitem_usage_total.hide()
+                self._menuitem_usage_flash.hide()
+                self._menuitem_usage_pro.hide()
+                if self._usage_timer_id:
+                    GLib.source_remove(self._usage_timer_id)
+                    self._usage_timer_id = 0
+
+        # Restart balance timer if interval changed
+        if balance_interval_changed and self._balance_timer_id:
+            GLib.source_remove(self._balance_timer_id)
+            self._balance_timer_id = GLib.timeout_add_seconds(
+                new_config.poll_interval_seconds, self._on_timer
+            )
+
+        # Restart usage timer if interval changed
+        if (
+            usage_interval_changed
+            and self._usage_timer_id
+            and self._usage_api is not None
+        ):
+            GLib.source_remove(self._usage_timer_id)
+            self._usage_timer_id = GLib.timeout_add_seconds(
+                new_config.usage_poll_interval_seconds, self._on_usage_timer
+            )
+
+        # Do an immediate poll with the new credentials
+        self._do_poll()
+        if self._usage_api is not None:
+            self._do_usage_poll()
+
+    def _on_open_panel(self, _widget) -> None:
+        """Generate and open the control panel in the default browser."""
+        import subprocess
+        import logging
+        log = logging.getLogger(__name__)
+        try:
+            path = generate_control_panel(
+                self._config, self._api, self._usage_api, self._store
+            )
+        except Exception:
+            log.exception("Failed to generate control panel")
+            self._notify(
+                "Panel Error",
+                "Failed to generate control panel. Check the logs for details.",
+                urgency=2,
+            )
+            return
+        # Try browsers explicitly — xdg-open may honor a misconfigured
+        # .html file association (e.g. Clash Party instead of a browser).
+        for browser in (
+            "sensible-browser",
+            "x-www-browser",
+            "firefox",
+            "google-chrome",
+            "chromium-browser",
+            "chromium",
+        ):
+            if subprocess.run(["which", browser],
+                              stdout=subprocess.DEVNULL,
+                              stderr=subprocess.DEVNULL).returncode == 0:
+                subprocess.Popen([browser, path], start_new_session=True)
+                return
+        # Last resort
+        subprocess.Popen(["xdg-open", path], start_new_session=True)
 
     def _do_poll(self) -> None:
         try:
             balance = self._api.get_balance()
         except APIError as e:
             log.warning("API poll failed: %s", e)
-            self._set_label(LABEL_ERROR + " 无连接")
-            self._menuitem_updated.set_label("上次更新: 失败")
+            self._set_label(LABEL_ERROR + " No Connection")
+            self._menuitem_updated.set_label("Last update: Failed")
             return
 
         self._store.add(balance)
         self._update_ui(balance)
+
+    # ------------------------------------------------------------------
+    # Usage polling
+    # ------------------------------------------------------------------
+
+    def _on_usage_timer(self) -> bool:
+        """GLib timer callback for usage polling."""
+        if not self._shutting_down and self._usage_api is not None:
+            self._do_usage_poll()
+        return True
+
+    def _do_usage_poll(self) -> None:
+        """Fetch monthly usage and update the menu section."""
+        from datetime import datetime
+        from monitor.usage_api import UsageAPIError
+        from monitor.usage_cache import save_usage, load_usage
+
+        try:
+            now = datetime.now()
+            usage = self._usage_api.get_monthly_usage(now.month, now.year)
+            save_usage(usage)
+            self._update_usage_menu(usage)
+            log.debug("Usage poll succeeded — MTD cost: ¥%.2f", usage.total_cost)
+        except UsageAPIError as e:
+            log.warning("Usage poll failed: %s", e)
+            # Fall back to cached data
+            cached = load_usage()
+            if cached:
+                self._update_usage_menu(cached)
+                log.debug("Using cached usage data (%.1fh old)",
+                          getattr(cached, '_age', 0))
+
+    def _update_usage_menu(self, usage) -> None:
+        """Refresh the Usage This Month menu items from a MonthlyUsage."""
+        from monitor.store import _load_currency_symbol
+        sym = _load_currency_symbol()
+
+        self._menuitem_usage_total.set_label(
+            f"  Total Cost: {sym}{usage.total_cost:.2f}"
+        )
+
+        for attr, key in [("_menuitem_usage_flash", "flash"),
+                           ("_menuitem_usage_pro", "pro")]:
+            item = getattr(self, attr)
+            m = usage.models.get(key)
+            if m:
+                tokens_k = m.total_tokens / 1000
+                hit_pct = m.cache_hit_rate * 100
+                item.set_label(
+                    f"  {m.display_name}: {tokens_k:.0f}K tokens "
+                    f"({hit_pct:.0f}% cache hit) - {sym}{m.total_cost:.2f}"
+                )
+            else:
+                name = key.title()
+                item.set_label(f"  {name}: no data")
 
     def _update_ui(self, balance: BalanceInfo) -> None:
         total = balance.total_balance
@@ -199,36 +443,42 @@ class BalanceIndicator:
         self._set_balance_label(total, sym)
 
         # -- Balance detail --
-        self._menuitem_total.set_label(f"总余额: {sym}{total:.2f}")
+        self._menuitem_total.set_label(f"Total Balance: {sym}{total:.2f}")
         self._menuitem_topped.set_label(
-            f"  充值余额: {sym}{balance.topped_up_balance:.2f}"
+            f"  Topped-up: {sym}{balance.topped_up_balance:.2f}"
         )
         self._menuitem_granted.set_label(
-            f"  赠送余额: {sym}{balance.granted_balance:.2f}"
+            f"  Granted: {sym}{balance.granted_balance:.2f}"
         )
 
         # -- Consumption (best-effort from current session) --
         self._menuitem_5m.set_label(
-            self._fmt_consumption("过去5分钟", self._store.consumption_since(5), sym)
+            self._fmt_consumption("Last 5 min", self._store.consumption_since(5), sym)
         )
         self._menuitem_30m.set_label(
-            self._fmt_consumption("过去30分钟", self._store.consumption_since(30), sym)
+            self._fmt_consumption("Last 30 min", self._store.consumption_since(30), sym)
         )
         self._menuitem_3h.set_label(
-            self._fmt_consumption("过去3小时", self._store.consumption_since(180), sym)
+            self._fmt_consumption("Last 3 hr", self._store.consumption_since(180), sym)
         )
 
         # -- Today = logs from previous sessions + current session --
         today_total = self._store.today_consumption()
-        self._menuitem_today.set_label(f"今日累计:   {sym}{today_total:.2f}")
+        self._menuitem_today.set_label(f"Today:       {sym}{today_total:.2f}")
 
         # -- Update time --
         self._menuitem_updated.set_label(
-            f"上次更新: {self._store.latest_update_time()}"
+            f"Last update: {self._store.latest_update_time()}"
         )
 
         # -- Alert --
         self._check_alert(total, sym)
+
+        # -- Charge button (visible only when balance is low) --
+        if total <= self._config.alert_threshold_yellow:
+            self._charge_item.show()
+        else:
+            self._charge_item.hide()
 
     # ------------------------------------------------------------------
     # Label helpers
@@ -241,7 +491,8 @@ class BalanceIndicator:
             emoji = LABEL_WARNING
         else:
             emoji = LABEL_DANGER
-        self._set_label(f"{emoji} {sym}{total:.2f}")
+        prefix = f"{emoji} " if emoji else ""
+        self._set_label(f"{prefix}{sym}{total:.2f}")
 
     def _set_label(self, text: str) -> None:
         self._indicator.set_label(text, "")
@@ -261,16 +512,16 @@ class BalanceIndicator:
             new_state = "red"
             if self._alert_state != "red":
                 self._notify(
-                    "⚠️ 余额严重不足！",
-                    f"DeepSeek 余额仅剩 {sym}{total:.2f}，请立即充值。",
+                    "Balance Critical",
+                    f"Only {sym}{total:.2f} remaining. Top up immediately.",
                     urgency=2,
                 )
         elif total <= self._config.alert_threshold_yellow:
             new_state = "yellow"
             if self._alert_state not in ("yellow", "red"):
                 self._notify(
-                    "余额不足提醒",
-                    f"DeepSeek 余额剩余 {sym}{total:.2f}，建议尽快充值。",
+                    "Balance Low",
+                    f"{sym}{total:.2f} remaining. Consider topping up soon.",
                     urgency=1,
                 )
         else:

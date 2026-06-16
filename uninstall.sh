@@ -6,11 +6,11 @@
 #
 set -euo pipefail
 
-APP_DIR="/opt/deepseek-monitor"
-USER_CFG_DIR="${HOME}/.config/deepseek-monitor"
-DATA_DIR="${HOME}/.local/share/deepseek-monitor"
-SERVICE_FILE="${HOME}/.config/systemd/user/deepseek-monitor.service"
-AUTOSTART_FILE="${HOME}/.config/autostart/deepseek-monitor.desktop"
+APP_DIR="/opt/panelwhale"
+USER_CFG_DIR="${HOME}/.config/panelwhale"
+DATA_DIR="${HOME}/.local/share/panelwhale"
+SERVICE_FILE="${HOME}/.config/systemd/user/panelwhale.service"
+AUTOSTART_FILE="${HOME}/.config/autostart/panelwhale.desktop"
 
 echo "========================================"
 echo " DeepSeek API Monitor — Uninstaller"
@@ -18,13 +18,14 @@ echo "========================================"
 echo ""
 
 # ---- 1. Stop & disable systemd service ---------------------------------------
-echo "→ Stopping and disabling systemd service …"
-systemctl --user stop deepseek-monitor.service 2>/dev/null && echo "  Service stopped." || echo "  No running service."
-systemctl --user disable deepseek-monitor.service 2>/dev/null || true
+echo "→ Stopping and disabling systemd services …"
+systemctl --user stop panelwhale.service 2>/dev/null && echo "  Monitor service stopped." || echo "  No running monitor service."
+systemctl --user disable panelwhale.service 2>/dev/null || true
 if [ -f "$SERVICE_FILE" ]; then
     rm -f "$SERVICE_FILE"
-    echo "✓ Service file removed."
+    echo "✓ Monitor service file removed."
 fi
+
 systemctl --user daemon-reload 2>/dev/null || true
 
 # ---- 2. Remove autostart desktop file ----------------------------------------
@@ -55,7 +56,7 @@ fi
 
 # ---- 6. Remove data -----------------------------------------------------------
 if [ -d "$DATA_DIR" ]; then
-    read -rp "→ Remove balance history at $DATA_DIR? [y/N] " CONFIRM
+    read -rp "→ Remove balance history, panel data, and summaries at $DATA_DIR? [y/N] " CONFIRM
     if [ "$CONFIRM" = "y" ] || [ "$CONFIRM" = "Y" ]; then
         rm -rf "$DATA_DIR"
         echo "✓ Data removed."

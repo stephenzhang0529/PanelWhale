@@ -1,15 +1,26 @@
-# DeepSeek Monitor — configuration
-# Copy this to ~/.config/deepseek-monitor/config.yaml and fill in your key.
+# PanelWhale — configuration
+# Copy this to ~/.config/panelwhale/config.yaml and fill in your key.
 # Environment variable DEEPSEEK_API_KEY overrides the file.
 
 api_key: "sk-your-api-key-here"
 
+# Usage token for platform.deepseek.com internal APIs (OPTIONAL).
+# Get it by logging into https://platform.deepseek.com and running in
+# the browser's DevTools console:
+#   JSON.parse(localStorage.userToken).value
+# Environment variable: DEEPSEEK_USAGE_TOKEN
+usage_token: ""
+
 # How often to check balance (seconds).  Minimum: 30.
 poll_interval_seconds: 300
 
+# How often to poll usage data (seconds).  Minimum: 600.  Default: 3600.
+# Environment variable: DM_USAGE_POLL_INTERVAL
+usage_poll_interval_seconds: 3600
+
 # Balance thresholds for colour changes and desktop notifications.
-#   above yellow — normal  (💎)
-#   yellow .. red — warning (🟡)
-#   below red      — danger  (🔴)
+#   above alert_threshold_yellow                   — normal
+#   alert_threshold_yellow .. alert_threshold_red  — warning (🟡)
+#   below alert_threshold_red                      — danger  (🔴)
 alert_threshold_yellow: 5.0
 alert_threshold_red: 1.0

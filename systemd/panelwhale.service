@@ -1,10 +1,10 @@
 [Unit]
-Description=DeepSeek API Usage Monitor
+Description=PanelWhale API Usage Monitor
 After=graphical-session.target
 PartOf=graphical-session.target
 
 [Service]
-ExecStart=/usr/bin/python3 /opt/deepseek-monitor/main.py
+ExecStart=/usr/bin/python3 /opt/panelwhale/main.py
 Restart=on-failure
 RestartSec=10
 
