@@ -110,7 +110,54 @@ fi
 mkdir -p "$DATA_DIR" "$DATA_DIR/logs" "$DATA_DIR/daily_summaries" "$DATA_DIR/panel"
 echo "✓ Data directories ready: $DATA_DIR"
 
-# ---- 6. Install systemd user service ------------------------------------------
+# ---- 6. Clean up old deepseek-monitor (v1.x) services --------------------------
+echo ""
+echo "→ Cleaning up old deepseek-monitor (v1.x) services …"
+if systemctl --user is-active --quiet deepseek-monitor.service 2>/dev/null; then
+    systemctl --user stop deepseek-monitor.service 2>/dev/null || true
+    echo "  Stopped old deepseek-monitor.service."
+fi
+if systemctl --user is-enabled --quiet deepseek-monitor.service 2>/dev/null; then
+    systemctl --user disable deepseek-monitor.service 2>/dev/null || true
+    echo "  Disabled old deepseek-monitor.service."
+fi
+if systemctl --user is-active --quiet deepseek-monitor-report.timer 2>/dev/null; then
+    systemctl --user stop deepseek-monitor-report.timer 2>/dev/null || true
+    echo "  Stopped old deepseek-monitor-report.timer."
+fi
+if systemctl --user is-enabled --quiet deepseek-monitor-report.timer 2>/dev/null; then
+    systemctl --user disable deepseek-monitor-report.timer 2>/dev/null || true
+    echo "  Disabled old deepseek-monitor-report.timer."
+fi
+# Remove old unit files
+for OLD in \
+    "${HOME}/.config/systemd/user/deepseek-monitor.service" \
+    "${HOME}/.config/systemd/user/deepseek-monitor-report.service" \
+    "${HOME}/.config/systemd/user/deepseek-monitor-report.timer"; do
+    if [ -f "$OLD" ]; then
+        rm -f "$OLD"
+        echo "  Removed $(basename "$OLD")."
+    fi
+done
+# Remove old report service for panelwhale (deprecated in v2.0)
+for OLD_RPT in \
+    "${HOME}/.config/systemd/user/panelwhale-report.service" \
+    "${HOME}/.config/systemd/user/panelwhale-report.timer"; do
+    if [ -f "$OLD_RPT" ]; then
+        systemctl --user stop "$(basename "$OLD_RPT")" 2>/dev/null || true
+        systemctl --user disable "$(basename "$OLD_RPT")" 2>/dev/null || true
+        rm -f "$OLD_RPT"
+        echo "  Removed deprecated $(basename "$OLD_RPT")."
+    fi
+done
+# Remove old application directory
+if [ -d "/opt/deepseek-monitor" ]; then
+    sudo rm -rf "/opt/deepseek-monitor"
+    echo "✓ Old /opt/deepseek-monitor/ removed."
+fi
+echo "✓ Cleanup complete."
+
+# ---- 7. Install systemd user service ------------------------------------------
 echo ""
 echo "→ Setting up systemd user services …"
 
@@ -123,7 +170,7 @@ systemctl --user daemon-reload
 systemctl --user enable panelwhale.service
 echo "✓ Service enabled (autostart on login)."
 
-# ---- 7. Start now -------------------------------------------------------------
+# ---- 8. Start now -------------------------------------------------------------
 echo ""
 echo "→ Starting the monitor …"
 # Stop any old instance first
@@ -143,7 +190,7 @@ else
     echo "  journalctl --user -u panelwhale -n 20"
 fi
 
-# ---- 8. Done ------------------------------------------------------------------
+# ---- 9. Done ------------------------------------------------------------------
 echo ""
 echo "========================================"
 echo " Installation complete!"

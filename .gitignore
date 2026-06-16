@@ -23,3 +23,6 @@ Thumbs.db
 # Project-specific — reference / design docs (not part of the app)
 DeepSeek_API_Analysis.md
 menu.md
+
+# Release artifacts
+dist/
