@@ -7,6 +7,8 @@
   <img src="https://img.shields.io/badge/memory-~80MB-lightgrey.svg" alt="Memory">
 </p>
 
+[English](README_EN.md)
+
 一款轻量级 Ubuntu 桌面应用，在顶部状态栏显示 [DeepSeek](https://platform.deepseek.com) API 余额与用量，支持消耗统计、余额告警、模型级 Token 分析、交互式控制面板和 GTK 设置窗口。     
 本项目基于 [DeepSeekMonitor](https://github.com/JayHome137/DeepSeekMonitor) 及 [DeepSeekMonitorWindows](https://github.com/Joyi-code/DeepSeekMonitorWindows) 项目改进，专为 Ubuntu 用户设计，提供更丰富的功能和更友好的用户体验。
 ## ✨ 功能特性
