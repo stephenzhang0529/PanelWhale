@@ -202,7 +202,7 @@ class UsageAPI:
         self._session.headers.update(
             {
                 "Authorization": f"Bearer {usage_token}",
-                "x-app-version": "2.0.0",
+                "x-app-version": "2.0.1",
                 "Accept": "*/*",
                 "User-Agent": (
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
