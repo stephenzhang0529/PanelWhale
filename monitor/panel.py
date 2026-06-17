@@ -47,6 +47,7 @@ def generate_control_panel(
 
     # 3. Usage data ----------------------------------------------------
     usage = _fetch_usage(usage_api)
+    has_usage = usage is not None
 
     # 4. Currency symbol -----------------------------------------------
     sym = _CURRENCY_MAP.get(
@@ -54,22 +55,44 @@ def generate_control_panel(
     )
 
     # 5. Compute chart data --------------------------------------------
-    # Daily consumption & hourly from summaries
     DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+    # -- Daily consumption: prefer usage API costs when available ------
     daily_dates: list[str] = []
     daily_values: list[float] = []
-    hourly_avg = [0.0] * 24
+
+    # Build a date → total_cost lookup from usage API daily data
+    _usage_cost_by_date: dict[str, float] = {}
+    if has_usage:
+        for day_entry in usage.daily:
+            day_cost = sum(
+                m.total_cost for m in day_entry.get("models", {}).values()
+            )
+            _usage_cost_by_date[day_entry["date"]] = round(day_cost, 4)
+
     for s in summaries:
         dt = datetime.strptime(s.date, "%Y-%m-%d")
         daily_dates.append(f"{DAY_LABELS[dt.weekday()]} {dt.month}/{dt.day}")
-        daily_values.append(round(s.total_consumption, 4))
+        if s.date in _usage_cost_by_date:
+            # Use usage API cost data (more accurate)
+            daily_values.append(_usage_cost_by_date[s.date])
+        elif has_usage and _usage_cost_by_date:
+            # Usage token is configured but this day has no data yet → 0
+            daily_values.append(0.0)
+        else:
+            # Fall back to local balance-polling summary
+            daily_values.append(round(s.total_consumption, 4))
+
+    # -- Hourly: still from local summaries (usage API has no hourly) ---
+    hourly_avg = [0.0] * 24
+    for s in summaries:
         for h in range(24):
             hourly_avg[h] += s.hourly[h]
     hourly_avg = [round(v / 7, 6) for v in hourly_avg]
     hourly_labels = [f"{h:02d}:00" for h in range(24)]
 
     # 6. Usage-dependent data ------------------------------------------
-    has_usage = usage is not None
+    # (has_usage already computed above)
     cache_hit_chart = "{}"
     flash_daily_chart = "{}"
     pro_daily_chart = "{}"
