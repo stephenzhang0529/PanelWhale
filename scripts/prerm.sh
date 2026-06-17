@@ -2,39 +2,34 @@
 #
 # prerm.sh — Runs before PanelWhale .deb is removed
 #
-set -e
+# NOTE: This runs as root during `sudo apt remove`. systemctl --user
+# commands cannot reach the user's D-Bus session. We do file-level
+# cleanup only; the user should run `systemctl --user stop/disable` first.
+#
+set -euo pipefail
 
 echo "========================================"
 echo " PanelWhale — Pre-remove"
 echo "========================================"
 
-# Stop and disable user services for any user that has them
+# Remove service files for all human users (best-effort)
 for _HOME in /home/*; do
     [ -d "$_HOME" ] || continue
     _USER=$(basename "$_HOME")
-    _SVC="$_HOME/.config/systemd/user/panelwhale.service"
-    if [ -f "$_SVC" ]; then
-        runuser -u "$_USER" -- systemctl --user stop panelwhale.service 2>/dev/null || true
-        runuser -u "$_USER" -- systemctl --user disable panelwhale.service 2>/dev/null || true
-        rm -f "$_SVC"
-        runuser -u "$_USER" -- systemctl --user daemon-reload 2>/dev/null || true
-        echo "  Stopped and disabled for user '$_USER'"
-    fi
-done
+    echo "  Cleaning up services for user '$_USER' …"
 
-# Also stop old deepseek-monitor if somehow still present
-for _HOME in /home/*; do
-    [ -d "$_HOME" ] || continue
-    _USER=$(basename "$_HOME")
-    if [ -f "$_HOME/.config/systemd/user/deepseek-monitor.service" ]; then
-        runuser -u "$_USER" -- systemctl --user stop deepseek-monitor.service 2>/dev/null || true
-        runuser -u "$_USER" -- systemctl --user disable deepseek-monitor.service 2>/dev/null || true
-        rm -f "$_HOME/.config/systemd/user/deepseek-monitor.service" \
-              "$_HOME/.config/systemd/user/deepseek-monitor-report.service" \
-              "$_HOME/.config/systemd/user/deepseek-monitor-report.timer"
-        runuser -u "$_USER" -- systemctl --user daemon-reload 2>/dev/null || true
-        echo "  Removed old deepseek-monitor services for user '$_USER'"
-    fi
+    # Try stop/disable (may fail if D-Bus unavailable — that's OK)
+    runuser -u "$_USER" -- systemctl --user stop panelwhale.service 2>/dev/null || true
+    runuser -u "$_USER" -- systemctl --user disable panelwhale.service 2>/dev/null || true
+    runuser -u "$_USER" -- systemctl --user daemon-reload 2>/dev/null || true
+
+    # Remove unit files
+    rm -f "$_HOME/.config/systemd/user/panelwhale.service" \
+          "$_HOME/.config/systemd/user/panelwhale-report.service" \
+          "$_HOME/.config/systemd/user/panelwhale-report.timer" \
+          "$_HOME/.config/systemd/user/deepseek-monitor.service" \
+          "$_HOME/.config/systemd/user/deepseek-monitor-report.service" \
+          "$_HOME/.config/systemd/user/deepseek-monitor-report.timer"
 done
 
 echo "✓ Ready for removal."

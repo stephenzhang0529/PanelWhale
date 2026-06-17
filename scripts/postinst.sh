@@ -2,7 +2,11 @@
 #
 # postinst.sh — Runs after PanelWhale .deb is installed
 #
-set -e
+# NOTE: This runs as root during `sudo apt install`. systemctl --user
+# commands cannot reach the user's D-Bus session from here, so we do
+# file-level cleanup only, and let the user enable/start manually.
+#
+set -euo pipefail
 
 APP_DIR="/opt/panelwhale"
 SERVICE_DIR_TEMPLATE="$APP_DIR/panelwhale.service"
@@ -11,58 +15,64 @@ echo "========================================"
 echo " PanelWhale v2.0 — Post-install"
 echo "========================================"
 
-# ---- Clean up old deepseek-monitor (v1.x) ----------------------------
+# ---- Figure out the real user ------------------------------------------
+_REAL_USER=""
+_REAL_HOME=""
 if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
-    _HOME=$(getent passwd "$SUDO_USER" | cut -d: -f6)
-    _SVC_DIR="$_HOME/.config/systemd/user"
-
-    # Stop old services
-    for OLD in deepseek-monitor.service deepseek-monitor-report.timer; do
-        if runuser -u "$SUDO_USER" -- systemctl --user is-enabled --quiet "$OLD" 2>/dev/null; then
-            runuser -u "$SUDO_USER" -- systemctl --user stop "$OLD" 2>/dev/null || true
-            runuser -u "$SUDO_USER" -- systemctl --user disable "$OLD" 2>/dev/null || true
-            echo "  Disabled old $OLD"
-        fi
-        [ -f "$_SVC_DIR/$OLD" ] && rm -f "$_SVC_DIR/$OLD"
-    done
-
-    # Remove deprecated panelwhale report services
-    for RPT in panelwhale-report.service panelwhale-report.timer; do
-        if runuser -u "$SUDO_USER" -- systemctl --user is-enabled --quiet "$RPT" 2>/dev/null; then
-            runuser -u "$SUDO_USER" -- systemctl --user stop "$RPT" 2>/dev/null || true
-            runuser -u "$SUDO_USER" -- systemctl --user disable "$RPT" 2>/dev/null || true
-        fi
-        [ -f "$_SVC_DIR/$RPT" ] && rm -f "$_SVC_DIR/$RPT"
-    done
-
-    # Reload user systemd
-    runuser -u "$SUDO_USER" -- systemctl --user daemon-reload 2>/dev/null || true
-
-    # Copy service file to user's systemd directory
-    mkdir -p "$_SVC_DIR"
-    cp "$SERVICE_DIR_TEMPLATE" "$_SVC_DIR/panelwhale.service"
-
-    # Enable and start
-    runuser -u "$SUDO_USER" -- systemctl --user daemon-reload
-    runuser -u "$SUDO_USER" -- systemctl --user enable panelwhale.service
-    runuser -u "$SUDO_USER" -- systemctl --user start panelwhale.service || true
-
-    echo ""
-    echo "✓ PanelWhale installed and started for user '$SUDO_USER'."
-    echo "  You should see the PanelWhale icon in your top panel."
-else
-    echo ""
-    echo "  To enable autostart for your user, run:"
-    echo "    systemctl --user enable --now panelwhale.service"
+    _REAL_USER="$SUDO_USER"
+    _REAL_HOME=$(getent passwd "$_REAL_USER" | cut -d: -f6)
+elif [ -n "${PKEXEC_UID:-}" ]; then
+    _REAL_USER=$(id -nu "$PKEXEC_UID" 2>/dev/null || echo "")
+    [ -n "$_REAL_USER" ] && _REAL_HOME=$(getent passwd "$_REAL_USER" | cut -d: -f6)
 fi
 
-# Remove old deepseek-monitor directory
+# ---- Clean up old deepseek-monitor (v1.x) service files -----------------
+if [ -n "$_REAL_HOME" ] && [ -d "$_REAL_HOME" ]; then
+    _SVC_DIR="$_REAL_HOME/.config/systemd/user"
+    for OLD_FILE in \
+        "$_SVC_DIR/deepseek-monitor.service" \
+        "$_SVC_DIR/deepseek-monitor-report.service" \
+        "$_SVC_DIR/deepseek-monitor-report.timer" \
+        "$_SVC_DIR/panelwhale-report.service" \
+        "$_SVC_DIR/panelwhale-report.timer"; do
+        if [ -f "$OLD_FILE" ]; then
+            rm -f "$OLD_FILE"
+            echo "  Removed $(basename "$OLD_FILE")"
+        fi
+    done
+fi
+
+# ---- Remove old /opt/deepseek-monitor -----------------------------------
 if [ -d "/opt/deepseek-monitor" ]; then
     rm -rf "/opt/deepseek-monitor"
     echo "✓ Removed old /opt/deepseek-monitor/"
 fi
 
+# ---- Install service file for the real user -----------------------------
+if [ -n "$_REAL_HOME" ] && [ -d "$_REAL_HOME" ]; then
+    _SVC_DIR="$_REAL_HOME/.config/systemd/user"
+    mkdir -p "$_SVC_DIR"
+    cp "$SERVICE_DIR_TEMPLATE" "$_SVC_DIR/panelwhale.service"
+    echo "✓ Service file installed for user '$_REAL_USER'"
+else
+    # fallback: install for all human users
+    for _H in /home/*; do
+        [ -d "$_H" ] || continue
+        _U=$(basename "$_H")
+        _D="$_H/.config/systemd/user"
+        mkdir -p "$_D"
+        cp "$SERVICE_DIR_TEMPLATE" "$_D/panelwhale.service"
+        echo "✓ Service file installed for user '$_U'"
+    done
+fi
+
 echo ""
 echo "========================================"
 echo " Install complete!"
+echo ""
+echo " To start PanelWhale now, run:"
+echo "   systemctl --user daemon-reload"
+echo "   systemctl --user enable --now panelwhale.service"
+echo ""
+echo " You should see the PanelWhale icon in your top panel."
 echo "========================================"
