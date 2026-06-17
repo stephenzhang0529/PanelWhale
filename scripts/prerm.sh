@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 #
-# prerm.sh — Runs before PanelWhale .deb is removed
+# prerm.sh — Runs before PanelWhale .deb files are removed
+#
+# Stops the running service and kills lingering processes. Config/data
+# cleanup is handled by postrm.
 #
 set -euo pipefail
 
@@ -22,29 +25,24 @@ _run_as_user() {
         "$@"
 }
 
-# ---- Stop, disable, and remove unit files for all human users ------------
+# ---- Stop & disable services for all human users ------------------------
 for _HOME in /home/*; do
     [ -d "$_HOME" ] || continue
     _USER=$(basename "$_HOME")
-    echo "  Cleaning up for user '$_USER' …"
+    echo "  Stopping services for user '$_USER' …"
 
-    # Try stop/disable with D-Bus (best-effort)
     _run_as_user "$_USER" systemctl --user stop panelwhale.service 2>/dev/null || true
     _run_as_user "$_USER" systemctl --user disable panelwhale.service 2>/dev/null || true
     _run_as_user "$_USER" systemctl --user daemon-reload 2>/dev/null || true
 
-    # Remove unit files
-    rm -f "$_HOME/.config/systemd/user/panelwhale.service" \
-          "$_HOME/.config/systemd/user/panelwhale-report.service" \
-          "$_HOME/.config/systemd/user/panelwhale-report.timer" \
-          "$_HOME/.config/systemd/user/deepseek-monitor.service" \
-          "$_HOME/.config/systemd/user/deepseek-monitor-report.service" \
-          "$_HOME/.config/systemd/user/deepseek-monitor-report.timer"
+    # Also stop old services just in case
+    _run_as_user "$_USER" systemctl --user stop deepseek-monitor.service 2>/dev/null || true
+    _run_as_user "$_USER" systemctl --user disable deepseek-monitor.service 2>/dev/null || true
 
-    # Kill any lingering panelwhale process for this user
+    # Kill lingering processes
     pkill -u "$_USER" -f "/opt/panelwhale/main.py" 2>/dev/null || true
     pkill -u "$_USER" -f "/opt/deepseek-monitor/main.py" 2>/dev/null || true
 done
 
-echo "✓ Ready for removal."
+echo "✓ Services stopped."
 echo "========================================"
