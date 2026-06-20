@@ -14,7 +14,7 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, GLib
 
-from monitor.config import Config, save_config
+from monitor.config import Config, save_config, get_data_root
 from monitor.api import DeepSeekAPI, APIError, BalanceInfo
 from monitor.usage_api import UsageAPI, UsageAPIError, MonthlyUsage
 
@@ -471,7 +471,7 @@ class SettingsWindow(Gtk.Window):
 def _currency_symbol() -> str:
     """Read cached currency code, return symbol. Defaults to ¥."""
     import json
-    cache = os.path.expanduser("~/.local/share/panelwhale/currency")
+    cache = os.path.join(get_data_root(), "currency")
     mapping = {"CNY": "¥", "USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥"}
     try:
         with open(cache, "r") as f:

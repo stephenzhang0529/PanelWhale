@@ -2,6 +2,11 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
+*.pyw
+
+# Virtual environment
+.venv/
+venv/
 
 # Runtime artifacts
 *.log
@@ -24,5 +29,11 @@ Thumbs.db
 DeepSeek_API_Analysis.md
 menu.md
 
-# Release artifacts
+# PyInstaller
 dist/
+build/
+*.manifest
+*.spec.bak
+
+# Test artifacts
+test_icon.png

@@ -1,7 +1,24 @@
 import os
+import sys
 import yaml
 from dataclasses import dataclass
 from typing import Optional
+
+
+def get_data_root() -> str:
+    """Platform-aware data directory for logs, caches, and runtime state."""
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+        return os.path.join(base, "panelwhale")
+    return os.path.expanduser("~/.local/share/panelwhale")
+
+
+def get_config_dir() -> str:
+    """Platform-aware config directory for config.yaml."""
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA", os.path.expanduser("~"))
+        return os.path.join(base, "PanelWhale")
+    return os.path.expanduser("~/.config/panelwhale")
 
 
 @dataclass
@@ -16,10 +33,10 @@ class Config:
 
 def _search_config_files() -> list[str]:
     """Return a list of config file paths to try, in priority order."""
-    return [
-        os.path.expanduser("~/.config/panelwhale/config.yaml"),
-        "/opt/panelwhale/config.yaml",
-    ]
+    paths = [os.path.join(get_config_dir(), "config.yaml")]
+    if sys.platform != "win32":
+        paths.append("/opt/panelwhale/config.yaml")
+    return paths
 
 
 def load_config(config_path: Optional[str] = None) -> Config:
@@ -81,7 +98,7 @@ def save_config(config: Config, path: Optional[str] = None) -> str:
     Returns the path that was written to.
     Raises ``OSError`` on I/O failure.
     """
-    target = path or os.path.expanduser("~/.config/panelwhale/config.yaml")
+    target = path or os.path.join(get_config_dir(), "config.yaml")
     os.makedirs(os.path.dirname(target), exist_ok=True)
 
     yaml_text = (

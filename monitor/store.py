@@ -7,11 +7,12 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from monitor.api import BalanceInfo
+from monitor.config import get_data_root
 
 
 LOCAL_TZ = datetime.now(timezone.utc).astimezone().tzinfo
 
-_DATA_ROOT = os.path.expanduser("~/.local/share/panelwhale")
+_DATA_ROOT = get_data_root()
 _LOGS_DIR = os.path.join(_DATA_ROOT, "logs")
 
 # Retention: keep raw session logs for 30 days; daily summaries live 365 days

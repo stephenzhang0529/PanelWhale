@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
-"""DeepSeek API Usage Monitor — Ubuntu panel indicator.
+"""DeepSeek API Usage Monitor — cross-platform panel / tray indicator.
 
-Displays DeepSeek API balance in the top-panel status bar and refreshes
-periodically.  See config.yaml for details.
+Linux:   Ubuntu panel indicator (AppIndicator3 + GTK)
+Windows: System-tray icon showing balance as text
+
+See config.yaml for details.
 """
 
 import os
 import sys
 import logging
-
-import gi
-gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk
 
 # Ensure the package is importable when run directly
 _PKG_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -21,7 +19,6 @@ if _PKG_DIR not in sys.path:
 from monitor.config import load_config
 from monitor.api import DeepSeekAPI
 from monitor.store import BalanceStore
-from monitor.indicator import BalanceIndicator
 from monitor.usage_api import UsageAPI
 
 log = logging.getLogger("panelwhale")
@@ -59,11 +56,21 @@ def main():
         "Session started — today_from_logs=¥%.2f", store.today_from_logs
     )
 
-    # Create the indicator — this starts polling + shutdown hooks
-    BalanceIndicator(config, api, store, usage_api=usage_api)
+    # Platform-specific indicator
+    if sys.platform == "win32":
+        from monitor.windows_tray import WindowsTrayIndicator
+        indicator = WindowsTrayIndicator(config, api, store, usage_api=usage_api)
+        log.info("Running Windows system-tray indicator")
+        indicator.run()
+    else:
+        import gi
+        gi.require_version("Gtk", "3.0")
+        from gi.repository import Gtk
+        from monitor.indicator import BalanceIndicator
 
-    # Let GTK own the process (signal handling via GLib.unix_signal_add)
-    Gtk.main()
+        BalanceIndicator(config, api, store, usage_api=usage_api)
+        log.info("Running Ubuntu panel indicator")
+        Gtk.main()
 
 
 if __name__ == "__main__":
