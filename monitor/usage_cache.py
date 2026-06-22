@@ -14,10 +14,11 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from monitor.usage_api import MonthlyUsage, ModelUsage
+from monitor.config import get_data_root
 
 log = logging.getLogger(__name__)
 
-_DATA_ROOT = os.path.expanduser("~/.local/share/panelwhale")
+_DATA_ROOT = get_data_root()
 _CACHE_FILE = os.path.join(_DATA_ROOT, "usage_cache.json")
 _LOCAL_TZ = datetime.now(timezone.utc).astimezone().tzinfo
 

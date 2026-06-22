@@ -13,9 +13,11 @@ from datetime import date, datetime, timedelta, timezone
 from dataclasses import dataclass, field
 from typing import Optional
 
+from monitor.config import get_data_root
+
 log = logging.getLogger(__name__)
 
-_DATA_ROOT = os.path.expanduser("~/.local/share/panelwhale")
+_DATA_ROOT = get_data_root()
 _LOGS_DIR = os.path.join(_DATA_ROOT, "logs")
 _SUMMARIES_DIR = os.path.join(_DATA_ROOT, "daily_summaries")
 _REPORTS_DIR = os.path.join(_DATA_ROOT, "reports")

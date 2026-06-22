@@ -10,14 +10,14 @@ import logging
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
-from monitor.config import Config
+from monitor.config import Config, get_data_root
 from monitor.api import DeepSeekAPI, APIError, BalanceInfo
 from monitor.store import BalanceStore
 from monitor.report import DailySummaryStore
 
 log = logging.getLogger(__name__)
 
-_DATA_ROOT = os.path.expanduser("~/.local/share/panelwhale")
+_DATA_ROOT = get_data_root()
 _PANEL_DIR = os.path.join(_DATA_ROOT, "panel")
 _LOCAL_TZ = datetime.now(timezone.utc).astimezone().tzinfo
 
