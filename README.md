@@ -7,72 +7,42 @@
   <img src="https://img.shields.io/badge/memory-~80MB-lightgrey.svg" alt="Memory">
 </p>
 
-一款轻量级跨平台桌面应用，在状态栏/系统托盘显示 [DeepSeek](https://platform.deepseek.com) API 余额与用量，支持消耗统计、余额告警、模型级 Token 分析、交互式控制面板和设置管理。
+一款轻量级 Ubuntu 桌面应用，在顶部状态栏显示 [DeepSeek](https://platform.deepseek.com) API 余额与用量，支持消耗统计、余额告警、模型级 Token 分析、交互式控制面板和 GTK 设置窗口。同时适配 Windows 系统。
 
-- **Ubuntu** — 顶部状态栏面板图标（AppIndicator3 + GTK）
-- **Windows** — 系统托盘图标，任务栏直接显示余额文字（像鲁大师）
-
-本项目基于 [DeepSeekMonitor](https://github.com/JayHome137/DeepSeekMonitor) 及 [DeepSeekMonitorWindows](https://github.com/Joyi-code/DeepSeekMonitorWindows) 项目改进。
+本项目基于 [DeepSeekMonitor](https://github.com/JayHome137/DeepSeekMonitor) 及 [DeepSeekMonitorWindows](https://github.com/Joyi-code/DeepSeekMonitorWindows) 项目改进。同时为 Ubuntu/Windows 适配，提供更丰富的功能和更友好的用户体验。
 
 ## ✨ 功能特性
 
-- **状态栏常驻** — Ubuntu 面板 / Windows 托盘直接显示余额，一目了然
-- **任务栏文字** — Windows 上像鲁大师一样在任务栏显示彩色余额数字，绿色/黄色/红色直观反映余额状态
+- **状态栏常驻** — Ubuntu 顶部状态栏 / Windows 托盘直接显示余额，一目了然
 - **用量统计** — 配置 Usage Token 后，右键菜单/展开菜单显示本月总费用及 Flash / Pro 模型 Token 量、缓存命中率
 - **右键菜单** — 查看余额明细、近期消耗、今日累计、本月用量
-- **控制面板** — 交互式 3 列 HTML 仪表盘，支持中/英文切换，包含余额卡片、模型用量行、缓存命中堆叠柱状图、日/小时消耗折线图、Flash / Pro 详情页
-- **设置管理** — Ubuntu: GTK 图形化界面；Windows: 点击 Settings 直接打开配置文件编辑
+- **控制面板** — 包含余额、模型用量、缓存命中堆叠柱状图、日/小时消耗折线图、Flash / Pro 详情页
+- **设置管理** — 点击 Settings 配置 API Key、Usage Token、轮询间隔、告警阈值、开机自启
 - **本地存储** — 会话消费 JSON 存储，重启后自动恢复今日累计
+- **systemd 托管** — 不依赖终端、崩溃自动重启、开机自启
 - **资源友好** — 约 80MB 内存，空闲 CPU 使用率为零
-- **余额告警** — ≤¥5 显示黄/🟡、≤¥1 显示红/🔴；跨阈值弹出桌面通知
+- **余额告警** — ≤¥5 显示🟡、≤¥1 显示🔴；跨阈值弹出桌面通知
 - **快捷充值** — 余额低时菜单出现 Charge 按钮，一键跳转 DeepSeek 充值页
 
 ## 安装
 
 ### Ubuntu
-
 ```bash
 cd PanelWhale
 chmod +x install.sh
 ./install.sh
 ```
 
-安装脚本自动完成：
-1. 检测 Ubuntu 版本并安装系统依赖
-2. 复制程序到 `/opt/panelwhale/`
-3. 引导配置 DeepSeek API Key
-4. 安装 systemd 服务并启用开机自启
-5. 立即启动
-
-> `sudo` 仅用于安装系统包。程序本身以普通用户身份运行。
+安装脚本后会引导配置 DeepSeek API Key，并启用开机自启。
+> `sudo` 仅用于安装系统包。程序本身以普通用户身份运行。     
 
 ### Windows
-
-**方式一：下载预构建 EXE**
-
-从 [Releases](https://github.com/Populus/PanelWhale/releases) 下载 `PanelWhale.exe`，双击运行即可。
-
-**方式二：从源码构建**
-
-```powershell
-cd PanelWhale
-.venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\python -m PyInstaller --clean panelwhale.spec
-# 输出: dist\PanelWhale.exe
-```
-
-> 构建前需要 Python 3.8+ 和 `pip install pystray Pillow pywin32 pyinstaller pyyaml requests`。
-
-首次运行时系统托盘图标可能在 Windows 11 的溢出区域（点击 `^` 箭头可见），可手动拖到可见区域。
+ [Releases](https://github.com/stephenzhang0529/PanelWhale/releases) 提供了所需的 `.exe` 安装包。
 
 ## 配置
-
-配置文件位置：
-
-| 平台 | 路径 |
-|------|------|
-| Ubuntu | `~/.config/panelwhale/config.yaml` |
-| Windows | `%APPDATA%\PanelWhale\config.yaml` |
+### Ubuntu
+可通过右键菜单 → **Settings** 在图形界面中修改。      
+也可编辑配置文件 `~/.config/panelwhale/config.yaml`：
 
 ```yaml
 api_key: "sk-your-api-key-here"
@@ -87,46 +57,31 @@ alert_threshold_yellow: 5.0         # ≤5 元 → 黄色告警
 alert_threshold_red: 1.0            # ≤1 元 → 红色告警
 ```
 
-或使用环境变量：`DEEPSEEK_API_KEY`、`DEEPSEEK_USAGE_TOKEN`。
+或使用环境变量：`DEEPSEEK_API_KEY`、`DEEPSEEK_USAGE_TOKEN`。改配置后重启：
 
-### Usage Token 获取
-
-Usage Token 和 API Key 是两个不同的凭证：
-
-| | API Key | Usage Token |
-|---|---|---|
-| 用途 | 查询余额 | 查询用量详情（模型级 Token/费用） |
-| 来源 | platform 后台 → API Keys | 浏览器登录后的 localStorage |
-| 必填 | **是** | 否 |
-
-获取步骤：
-1. 浏览器打开 https://platform.deepseek.com 并登录
-2. 按 `F12` → **Console**（控制台）标签
-3. 执行 `JSON.parse(localStorage.userToken).value`
-4. 输出的字符串即为 Usage Token，填入配置文件
-
-配置了 Usage Token 后，控制面板会多出：模型用量行、缓存命中详情图、Flash/Pro 单模型日消耗图。
-
-Ubuntu 改配置后重启：
 ```bash
 systemctl --user restart panelwhale
 ```
+### Windows
+可编辑配置文件 `%APPDATA%\PanelWhale\config.yaml`
+
 
 ## 使用
+### Ubuntu 面板
+#### 顶部状态栏常驻显示及右键菜单
+![Right-click Menu](assets/menu.png)
+#### 控制面板（Open Control Panel）
+![Control Panel](assets/panel.png)
+#### 设置面板（Settings）
+![Settings](assets/setting.png)
+
+
 
 ### Windows 托盘
 - **鼠标悬停** — 显示余额和今日消费提示
 - **左键单击** — 在浏览器中打开控制面板
 - **右键单击** — 展开菜单（余额详情、刷新、充值、设置、退出）
 
-### Ubuntu 面板
-- **左键单击** — 展开右键菜单
-- **Settings** — GTK 图形化设置窗口
-
-### 控制面板
-![Control Panel](assets/panel.png)
-
-控制面板右上角有 `中` / `EN` 语言切换按钮，支持中文和英文界面。
 
 ## 项目结构
 
